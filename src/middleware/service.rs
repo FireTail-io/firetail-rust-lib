@@ -20,7 +20,7 @@ impl<S, B> Service<ServiceRequest> for LoggingMiddleware<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
     S::Future: 'static,
-    B: 'static,
+    B: 'static + std::fmt::Debug,
 {
     type Response = ServiceResponse<B>;
     type Error = Error;
@@ -29,7 +29,7 @@ where
     dev::forward_ready!(service);
 
     fn call(&self, mut req: ServiceRequest) -> Self::Future {
-        let (_api_key, url) = env_vars();
+        let (api_key, url) = env_vars();
         let svc = self.service.clone();
 
         Box::pin(async move {
@@ -50,21 +50,28 @@ where
                 .with(RetryTransientMiddleware::new_with_policy(retry_policy))
                 .build();
 
-            run(client, url).await;
-            println!("response: {:?}", res.headers());
+            // call firetail backend and send data
+            run(client, url, api_key).await;
+            println!("response body: {:?}", res.response().body());
+            let header_iter = res.response().headers();
+            for val in header_iter {
+                println!("header iter: {:?}", val);
+            }
             Ok(res)
         })
     }
 }
 
-async fn run(client: ClientWithMiddleware, url: String) {
-    println!("url: {}", url);
-    client
-        .post(url)
-        .header("foo", "bar")
-        .send()
-        .await
-        .unwrap();
+async fn run(client: ClientWithMiddleware, url: String, api_key: String) {
+//    println!("url: {}", url);
+        let res = client
+            .post(url)
+            .header("Content-Type", "application/nd-json")
+            .header("x-ft-api-key", api_key)
+            .send()
+            .await
+            .unwrap();
+        println!("firetail status: {:?}", res.status())
 }
 
 fn bytes_to_payload(buf: web::Bytes) -> dev::Payload {
