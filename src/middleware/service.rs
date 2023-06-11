@@ -35,6 +35,13 @@ where
         Box::pin(async move {
             // extract bytes from request body
             let body = req.extract::<web::Bytes>().await.unwrap();
+            let req_header_iter = req.headers();
+            for val in req_header_iter {
+                println!("request header: {:?}", val);
+            }
+            println!("request method: {:?}", req.method());
+            println!("request http version: {:?}", req.version());
+            println!("request path {:?}", req.path());
             println!("request body (middleware): {body:?}");
 
             // re-insert body back into request to be used by handlers
@@ -53,9 +60,10 @@ where
             // call firetail backend and send data
             run(client, url, api_key).await;
             println!("response body: {:?}", res.response().body());
-            let header_iter = res.response().headers();
-            for val in header_iter {
-                println!("header iter: {:?}", val);
+
+            let res_header_iter = res.response().headers();
+            for val in res_header_iter {
+                println!("response header iter: {:?}", val);
             }
             Ok(res)
         })
