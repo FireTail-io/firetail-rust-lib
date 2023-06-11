@@ -1,17 +1,15 @@
 use crate::middleware::backend::{env_vars};
 use actix_web::{
-    dev::{self, Service, ServiceRequest, ServiceResponse, Transform},
+    dev::{self, Service, ServiceRequest, ServiceResponse},
     web, Error,
 };
 use futures_util::future::LocalBoxFuture;
 use actix_http::h1;
 use std::{
-    future::{ready, Ready},
     rc::Rc,
 };
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
-use reqwest_tracing::TracingMiddleware;
 
 pub struct LoggingMiddleware<S> {
     // This is special: We need this to avoid lifetime issues.
@@ -31,7 +29,7 @@ where
     dev::forward_ready!(service);
 
     fn call(&self, mut req: ServiceRequest) -> Self::Future {
-        let (api_key, url) = env_vars();
+        let (_api_key, url) = env_vars();
         let svc = self.service.clone();
 
         Box::pin(async move {

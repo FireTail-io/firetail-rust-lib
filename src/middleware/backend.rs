@@ -1,8 +1,4 @@
 use std::env;
-use actix_web::{
-    dev::{self, Service, ServiceRequest, ServiceResponse, Transform},
-    web, Error,
-};
 
 pub fn env_vars() -> (String, String) {
     let api_key = env::var("FIRETAIL_APIKEY").expect("FIRETAIL_APIKEY env var is not set");
