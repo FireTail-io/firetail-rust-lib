@@ -10,11 +10,30 @@ use std::{
 };
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
+use serde::{Serialize, Deserialize};
+//use chrono::{Datelike, Timelike, Utc};
 
 pub struct LoggingMiddleware<S> {
     // This is special: We need this to avoid lifetime issues.
     pub service: Rc<S>,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Data {
+    version: i32,
+    dateCreated: String,
+    executionTime: String,
+    request: Request,
+    response: Response,
+    oauth: Oauth
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Request {}
+#[derive(Serialize, Deserialize, Debug)]
+struct Response {}
+#[derive(Serialize, Deserialize, Debug)]
+struct Oauth {}
 
 impl<S, B> Service<ServiceRequest> for LoggingMiddleware<S>
 where
@@ -42,7 +61,7 @@ where
             println!("request method: {:?}", req.method());
             println!("request http version: {:?}", req.version());
             println!("request path {:?}", req.path());
-            println!("request body (middleware): {body:?}");
+            println!("request body (middleware): {:?}", body);
 
             // re-insert body back into request to be used by handlers
             req.set_payload(bytes_to_payload(body));
