@@ -11,7 +11,7 @@ use std::{
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use serde::{Serialize, Deserialize};
-//use chrono::{Datelike, Timelike, Utc};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct LoggingMiddleware<S> {
     // This is special: We need this to avoid lifetime issues.
@@ -19,19 +19,33 @@ pub struct LoggingMiddleware<S> {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 struct Data {
-    version: i32,
-    dateCreated: String,
-    executionTime: String,
+    version: String,
+    date_created: u128,
+    execution_time: u128,
     request: Request,
     response: Response,
-    oauth: Oauth
+//    oauth: Oauth
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct Request {}
+#[serde(rename_all = "camelCase")]
+struct Request {
+    http_protocol: String,
+    headers: String,
+    method: String,
+    body: String,
+    ip: String,
+    resource_path: String,
+    uri: String
+}
 #[derive(Serialize, Deserialize, Debug)]
-struct Response {}
+struct Response {
+    status_code: u32,
+    headers: String,
+    body: String,
+}
 #[derive(Serialize, Deserialize, Debug)]
 struct Oauth {}
 
@@ -52,6 +66,11 @@ where
         let svc = self.service.clone();
 
         Box::pin(async move {
+            let start = SystemTime::now();
+            let date_created = start
+                .duration_since(UNIX_EPOCH)
+                .expect("Start time of request");
+
             // extract bytes from request body
             let body = req.extract::<web::Bytes>().await.unwrap();
             let req_header_iter = req.headers();
@@ -76,8 +95,40 @@ where
                 .with(RetryTransientMiddleware::new_with_policy(retry_policy))
                 .build();
 
+            let end = SystemTime::now();
+            let date_running = end
+                .duration_since(UNIX_EPOCH)
+                .expect("Time after running request");
+
+            let request = Request {
+                http_protocol: "HTTP/1.1".to_string(),
+                headers: "{\"key\":[\"value\"]}".to_string(),
+                method: "POST".to_string(),
+                body: "{\"key\":\"value\"}".to_string(),
+                ip: "\"127.0.0.1\"".to_string(),
+                resource_path: "/posts/{postId}/comments".to_string(),
+                uri: "http://localhost:8080".to_string()
+            };
+
+            let response = Response {
+                status_code: 200,
+                body: "{\"key\":\"value\"}".to_string(),
+                headers: "{\"key\":[\"value\"]}".to_string()
+            };
+
+            let data = Data {
+                version: "1.0.0-alpha".to_string(),
+                date_created: date_created.as_millis(),
+                execution_time: date_running.as_millis() - date_created.as_millis(),
+                request: request,
+                response: response,
+            };
+
+            let payload = serde_json::to_string(&data)?;
+
             // call firetail backend and send data
-            run(client, url, api_key).await;
+            run(client, url, api_key, payload).await;
+
             println!("response body: {:?}", res.response().body());
 
             let res_header_iter = res.response().headers();
@@ -89,12 +140,13 @@ where
     }
 }
 
-async fn run(client: ClientWithMiddleware, url: String, api_key: String) {
+async fn run(client: ClientWithMiddleware, url: String, api_key: String, payload: String) {
 //    println!("url: {}", url);
         let res = client
             .post(url)
             .header("Content-Type", "application/nd-json")
             .header("x-ft-api-key", api_key)
+            .body(payload)
             .send()
             .await
             .unwrap();
