@@ -12,10 +12,24 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use serde::{Serialize, Deserialize};
 use std::time::{SystemTime, UNIX_EPOCH};
+use actix_web::http::Version;
+use std::collections::HashMap;
+use actix_web::web::Bytes;
+use actix_web::body::to_bytes;
 
 pub struct LoggingMiddleware<S> {
     // This is special: We need this to avoid lifetime issues.
     pub service: Rc<S>,
+}
+
+trait Body {
+    fn as_str(&self) -> &str;
+}
+
+impl Body for Bytes {
+    fn as_str(&self) -> &str {
+        std::str::from_utf8(self).unwrap()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -25,35 +39,36 @@ struct Data {
     date_created: u128,
     execution_time: u128,
     request: Request,
-    response: Response,
-//    oauth: Oauth
+    response: Response
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct Request {
     http_protocol: String,
-    headers: String,
+    headers: HashMap<String, Vec<String>>,
     method: String,
     body: String,
     ip: String,
-    resource_path: String,
+    resource: String,
     uri: String
 }
+
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 struct Response {
-    status_code: u32,
-    headers: String,
-    body: String,
+    status_code: u16,
+    headers: HashMap<String, Vec<String>>,
+    body: String
 }
-#[derive(Serialize, Deserialize, Debug)]
-struct Oauth {}
+
+static mut PAYLOAD: Vec<String> = Vec::new();
 
 impl<S, B> Service<ServiceRequest> for LoggingMiddleware<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
     S::Future: 'static,
-    B: 'static + std::fmt::Debug,
+    B: 'static + std::fmt::Debug + actix_web::body::MessageBody,
 {
     type Response = ServiceResponse<B>;
     type Error = Error;
@@ -73,47 +88,58 @@ where
 
             // extract bytes from request body
             let body = req.extract::<web::Bytes>().await.unwrap();
-            let req_header_iter = req.headers();
-            for val in req_header_iter {
-                println!("request header: {:?}", val);
-            }
-            println!("request method: {:?}", req.method());
-            println!("request http version: {:?}", req.version());
-            println!("request path {:?}", req.path());
-            println!("request body (middleware): {:?}", body);
 
-            // re-insert body back into request to be used by handlers
+            // process the headers
+            let req_header_iter = req.headers();
+            let mut req_headers: HashMap<String, Vec<String>> = HashMap::new();
+            for (key, val) in req_header_iter {
+                let value = vec![val.to_str().unwrap().to_string()];
+                req_headers.insert(key.as_str().to_string(), value);
+            }
+
+            let protocol = match req.version() {
+                Version::HTTP_09 => "HTTP/0.9",
+                Version::HTTP_10 => "HTTP/1.0",
+                Version::HTTP_11 => "HTTP/1.1",
+                Version::HTTP_2 => "HTTP/2.0",
+                Version::HTTP_3 => "HTTP/3.0",
+                _ => "Unknown HTTP Protocol",
+            };
+
+            let request = Request {
+                http_protocol: protocol.to_string(),
+                headers: req_headers,
+                method: req.method().as_str().to_string(),
+                body: std::str::from_utf8(&body).unwrap().to_string(),
+                ip: req.connection_info().realip_remote_addr().unwrap().to_string(),
+                resource: "/posts/{postId}/comments".to_string(),
+                uri: req.connection_info().scheme().to_string() + "://" + req.connection_info().host() + req.path()
+            };
+
             req.set_payload(bytes_to_payload(body));
 
+            // run request middleware
             let res = svc.call(req).await?;
 
-            // Retry up to 3 times with increasing intervals between attempts.
-            let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
-            let client = ClientBuilder::new(reqwest::Client::new())
-                // Trace HTTP requests. See the tracing crate to make use of these traces.
-                // Retry failed requests.
-                .with(RetryTransientMiddleware::new_with_policy(retry_policy))
-                .build();
-
+            // time after request
             let end = SystemTime::now();
             let date_running = end
                 .duration_since(UNIX_EPOCH)
-                .expect("Time after running request");
+                .expect("Time since running request");
 
-            let request = Request {
-                http_protocol: "HTTP/1.1".to_string(),
-                headers: "{\"key\":[\"value\"]}".to_string(),
-                method: "POST".to_string(),
-                body: "{\"key\":\"value\"}".to_string(),
-                ip: "\"127.0.0.1\"".to_string(),
-                resource_path: "/posts/{postId}/comments".to_string(),
-                uri: "http://localhost:8080".to_string()
-            };
+            //println!("response body: {:?}", res.response().body());
+
+            let res_header_iter = res.response().headers();
+            let mut res_headers: HashMap<String, Vec<String>> = HashMap::new();
+            for (key, val) in res_header_iter {
+                let value = vec![val.to_str().unwrap().to_string()];
+                res_headers.insert(key.as_str().to_string(), value);
+            }
 
             let response = Response {
-                status_code: 200,
-                body: "{\"key\":\"value\"}".to_string(),
-                headers: "{\"key\":[\"value\"]}".to_string()
+                status_code: u16::from(res.status()),
+                body: "{}".to_string(),
+                headers: res_headers
             };
 
             let data = Data {
@@ -124,17 +150,34 @@ where
                 response: response,
             };
 
-            let payload = serde_json::to_string(&data)?;
+            let json_data = serde_json::to_string(&data)?;
 
-            // call firetail backend and send data
-            run(client, url, api_key, payload).await;
+            unsafe {
+                PAYLOAD.push(json_data);
+                //println!("json data: {}", json_data); 
 
-            println!("response body: {:?}", res.response().body());
+                //println!("payload: {:?}", payload);
+                //println!("{}", PAYLOAD.len());
+                // if payload length is more than 10 items
+                if PAYLOAD.len() >= 10 {
 
-            let res_header_iter = res.response().headers();
-            for val in res_header_iter {
-                println!("response header iter: {:?}", val);
+                    let k = PAYLOAD.join("\n");
+                    //println!("payload: {}", k);
+
+                    // Retry up to 3 times with increasing intervals between attempts.
+                    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
+                    let client = ClientBuilder::new(reqwest::Client::new())
+                        // Trace HTTP requests. See the tracing crate to make use of these traces.
+                        // Retry failed requests.
+                        .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+                        .build();
+
+                    // call firetail backend and send data
+                    run(client, url, api_key, k).await;
+                    PAYLOAD.clear();
+                }
             }
+
             Ok(res)
         })
     }
@@ -142,9 +185,10 @@ where
 
 async fn run(client: ClientWithMiddleware, url: String, api_key: String, payload: String) {
 //    println!("url: {}", url);
+        //println!("executing request");
         let res = client
             .post(url)
-            .header("Content-Type", "application/nd-json")
+            .header("content-type", "application/nd-json")
             .header("x-ft-api-key", api_key)
             .body(payload)
             .send()

@@ -20,7 +20,7 @@ impl<S: 'static, B> Transform<S, ServiceRequest> for FiretailLogging
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,
-    B: 'static + std::fmt::Debug,
+    B: 'static + std::fmt::Debug + actix_web::body::MessageBody,
 {
     type Response = ServiceResponse<B>;
     type Error = Error;
