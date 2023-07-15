@@ -2,6 +2,7 @@ use crate::middleware::backend::{env_vars};
 use actix_web::{
     dev::{self, Service, ServiceRequest, ServiceResponse},
     web, Error,
+    web::{Bytes}
 };
 use futures_util::future::LocalBoxFuture;
 use actix_http::h1;
@@ -14,8 +15,7 @@ use serde::{Serialize, Deserialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 use actix_web::http::Version;
 use std::collections::HashMap;
-use actix_web::web::Bytes;
-use actix_web::body::to_bytes;
+use std::fmt::Debug;
 
 pub struct LoggingMiddleware<S> {
     // This is special: We need this to avoid lifetime issues.
@@ -138,7 +138,7 @@ where
 
             let response = Response {
                 status_code: u16::from(res.status()),
-                body: "{}".to_string(),
+                body: format!("{:?}", res.response().body()),  // minor hack to get it to work
                 headers: res_headers
             };
 
@@ -154,15 +154,9 @@ where
 
             unsafe {
                 PAYLOAD.push(json_data);
-                //println!("json data: {}", json_data); 
-
-                //println!("payload: {:?}", payload);
-                //println!("{}", PAYLOAD.len());
-                // if payload length is more than 10 items
                 if PAYLOAD.len() >= 10 {
 
                     let k = PAYLOAD.join("\n");
-                    //println!("payload: {}", k);
 
                     // Retry up to 3 times with increasing intervals between attempts.
                     let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
@@ -184,8 +178,6 @@ where
 }
 
 async fn run(client: ClientWithMiddleware, url: String, api_key: String, payload: String) {
-//    println!("url: {}", url);
-        //println!("executing request");
         let res = client
             .post(url)
             .header("content-type", "application/nd-json")
