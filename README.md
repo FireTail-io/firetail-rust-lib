@@ -1,12 +1,12 @@
-###Rust Library
+### Rust Library
 * Note: The library is built for actix at the moment
 
-##Before running this library
+## Before running this library
 * Make sure there are firetail environment variables. The two environment variables needed are:
 1. `FIRETAIL_APIKEY` - This is the API Key used to communicate with firetail servers
 2. `FIRETAIL_URL` - This is the firetail backend URL, which can be sandbox or production
 
-##Example code to run it with actix
+## Example code to run it with actix
 ```rust
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use firetail_actix_lib::FiretailLogging;
