@@ -186,16 +186,21 @@ where
 
 #[tokio::main]
 async fn run(client: ClientWithMiddleware, url: String, api_key: String, payload: String) -> Result<(), Box<dyn std::error::Error>> {
-         client
+         let res =  client
              .post(url)
              .header("content-type", "application/nd-json")
              .header("x-ft-api-key", api_key)
              .body(payload)
              .send()
-         .await?;
+             .await?;
+
+        if res.status() == 200 {
+            println!("Successfully sent to firetail");
+        } else {
+            println!("Error sending to firetail with error: {}", res.status());
+        };
 
         Ok(())
-        //println!("firetail status: {:?}", res.status())
 }
 
 fn bytes_to_payload(buf: web::Bytes) -> dev::Payload {
