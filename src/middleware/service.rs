@@ -17,7 +17,10 @@ use actix_web::http::Version;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use pluralizer::pluralize;
-use std::convert::TryFrom;
+use std::thread;
+use std::mem::size_of_val;
+
+const MAX_BULK_SIZE_IN_BYTES: usize = 1 * 1024* 1024; // 1MB
 
 pub struct LoggingMiddleware<S> {
     // This is special: We need this to avoid lifetime issues.
@@ -156,7 +159,7 @@ where
 
             unsafe {
                 PAYLOAD.push(json_data);
-                if PAYLOAD.len() >= 10 {
+                if PAYLOAD.len() >= 10 || size_of_val(&*PAYLOAD) >= MAX_BULK_SIZE_IN_BYTES {
 
                     let k = PAYLOAD.join("\n");
 
@@ -168,9 +171,11 @@ where
                         .with(RetryTransientMiddleware::new_with_policy(retry_policy))
                         .build();
 
-                    // call firetail backend and send data
-                    run(client, url, api_key, k).await;
-                    PAYLOAD.clear();
+                    // call firetail backend and send data by spawning a thread
+                    thread::spawn(|| {
+                        let _ = run(client, url, api_key, k);
+                        PAYLOAD.clear(); // remove the payload from memory
+                    });
                 }
             }
 
@@ -179,17 +184,18 @@ where
     }
 }
 
-async fn run(client: ClientWithMiddleware, url: String, api_key: String, payload: String) {
-        let res = client
-            .post(url)
-            .header("content-type", "application/nd-json")
-            .header("x-ft-api-key", api_key)
-            .body(payload)
-            .send()
-            .await
-            .unwrap();
+#[tokio::main]
+async fn run(client: ClientWithMiddleware, url: String, api_key: String, payload: String) -> Result<(), Box<dyn std::error::Error>> {
+         client
+             .post(url)
+             .header("content-type", "application/nd-json")
+             .header("x-ft-api-key", api_key)
+             .body(payload)
+             .send()
+         .await?;
 
-        println!("firetail status: {:?}", res.status())
+        Ok(())
+        //println!("firetail status: {:?}", res.status())
 }
 
 fn bytes_to_payload(buf: web::Bytes) -> dev::Payload {
