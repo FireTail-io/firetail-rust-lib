@@ -9,7 +9,7 @@
 ### Example code to run it with actix
 ```rust
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
-use firetail_actix_lib::FiretailLogging;
+use firetail_rust_lib::FiretailLogging;
 
 #[get("/")]
 async fn hello() -> impl Responder {
