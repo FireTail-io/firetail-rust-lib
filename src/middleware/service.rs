@@ -16,6 +16,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use actix_web::http::Version;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use pluralizer::pluralize;
+use std::convert::TryFrom;
 
 pub struct LoggingMiddleware<S> {
     // This is special: We need this to avoid lifetime issues.
@@ -112,9 +114,9 @@ where
                 method: req.method().as_str().to_string(),
                 body: std::str::from_utf8(&body).unwrap().to_string(),
                 ip: req.connection_info().realip_remote_addr().unwrap().to_string(),
-                resource: "/posts/{postId}/comments".to_string(),
+                resource: convert_path_to_resource(req.path().to_string()),
                 uri: req.connection_info().scheme().to_string() + "://" + req.connection_info().host() + req.path()
-            };
+            };  
 
             req.set_payload(bytes_to_payload(body));
 
@@ -186,6 +188,7 @@ async fn run(client: ClientWithMiddleware, url: String, api_key: String, payload
             .send()
             .await
             .unwrap();
+
         println!("firetail status: {:?}", res.status())
 }
 
@@ -193,4 +196,27 @@ fn bytes_to_payload(buf: web::Bytes) -> dev::Payload {
     let (_, mut pl) = h1::Payload::create(true);
     pl.unread_data(buf);
     dev::Payload::from(pl)
+}
+
+fn convert_path_to_resource(path: String) -> String {
+    let items = path.split("/");
+    let mut resources: Vec<String> = vec![];
+    for item in items {
+        resources.push(item.to_string());
+    }
+
+    let mut resource: Vec<String> = vec![];
+    for (index, item) in resources.iter().enumerate() {
+        if item.parse::<u64>().is_ok() {
+            // go back one index to get the string
+            let back = index-1;
+            // pluralize and do stringId, example: "productId"
+            resource.push(format!("{}Id", pluralize(&resources[back].to_string(), 1, false)));
+        } else {
+            resource.push(resources[index].to_string());
+        }
+    }
+
+    let final_resource = resource.join("/");
+    return final_resource;
 }
