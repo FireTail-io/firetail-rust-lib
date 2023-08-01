@@ -5,8 +5,7 @@ use std::{
 };
 
 use actix_web::{
-    dev::{self, Service, ServiceRequest, ServiceResponse, Transform},
-    web, Error,
+    dev::{Service, ServiceRequest, ServiceResponse, Transform}, Error,
 };
 
 pub struct FiretailLogging;
@@ -21,7 +20,7 @@ impl<S: 'static, B> Transform<S, ServiceRequest> for FiretailLogging
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,
-    B: 'static,
+    B: 'static + std::fmt::Debug + actix_web::body::MessageBody,
 {
     type Response = ServiceResponse<B>;
     type Error = Error;
