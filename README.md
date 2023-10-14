@@ -4,7 +4,7 @@
 ### Before running this library
 * Make sure there are firetail environment variables. The two environment variables needed are:
 1. `FIRETAIL_APIKEY` - This is the API Key used to communicate with firetail servers
-2. `FIRETAIL_URL` - This is the firetail backend URL, which can be sandbox or production
+2. `FIRETAIL_URL` - This is the firetail backend URL, which can be set the US servers and by default it points to EU (Europe) servers. If your servers are in US, it is recommended to set it to `https://api.logging.us-east-2.prod.us.firetail.app`
 
 ### Example code to run it with actix
 ```rust
