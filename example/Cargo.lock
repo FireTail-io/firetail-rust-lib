@@ -512,7 +512,7 @@ checksum = "25cbce373ec4653f1a01a31e8a5e5ec0c622dc27ff9c4e6606eefef5cbbed4a5"
 [[package]]
 name = "firetail-rust-lib"
 version = "0.1.1"
-source = "git+ssh://git@github.com/FireTail-io/firetail-rust-lib.git?branch=chore/update-backend-url-documentation#df915045c6578527f487843889a6fe78dea23be4"
+source = "git+ssh://git@github.com/FireTail-io/firetail-rust-lib.git?branch=chore/update-backend-url-documentation#abe92846284b26b3fab6f3319292bb216e3864b8"
 dependencies = [
  "actix-http",
  "actix-web",
