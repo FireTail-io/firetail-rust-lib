@@ -24,5 +24,5 @@ version = "4.3.1"
 version = "3.3.1"
 
 [lib]
-name = "firetail_actix_lib"
+name = "firetail_rust_lib"
 path = "src/lib.rs"
